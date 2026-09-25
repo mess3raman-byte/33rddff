@@ -3,47 +3,239 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar System Visualization</title>
+    <title>3D PCF Piping Viewer</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Solar System Visualization</h1>
-            <p class="subtitle">Interactive 3D Model of Our Solar System</p>
+    <div class="app-container">
+        <!-- Top Navigation / Toolbar -->
+        <header class="app-header">
+            <div class="header-brand">
+                <i class="fa-solid fa-network-wired logo-icon"></i>
+                <h1>PCF <span>3D Viewer</span></h1>
+                <span class="version-tag">v1.0</span>
+            </div>
+
+            <div class="toolbar">
+                <div class="toolbar-group">
+                    <label for="file-input" class="btn btn-primary">
+                        <i class="fa-solid fa-folder-open"></i> Open PCF
+                    </label>
+                    <input type="file" id="file-input" accept=".pcf,.txt" hidden>
+
+                    <select id="sample-select" class="select-control">
+                        <option value="" disabled selected>Load Sample PCF...</option>
+                        <option value="simple-pipeline">Process Line - 6" Steel (Simple)</option>
+                        <option value="complex-manifold">Manifold Loop with Valves & Tees</option>
+                        <option value="branched-line">Branch Line with Reducers & Flanges</option>
+                    </select>
+                </div>
+
+                <div class="toolbar-divider"></div>
+
+                <div class="toolbar-group">
+                    <button id="btn-reset-view" class="btn btn-secondary" title="Reset Camera View">
+                        <i class="fa-solid fa-video"></i> Reset View
+                    </button>
+                    <button id="btn-toggle-grid" class="btn btn-secondary active" title="Toggle Grid Floor">
+                        <i class="fa-solid fa-border-all"></i> Grid
+                    </button>
+                    <button id="btn-toggle-axes" class="btn btn-secondary active" title="Toggle Axes Helper">
+                        <i class="fa-solid fa-arrows-up-down-left-right"></i> Axes
+                    </button>
+                    <button id="btn-toggle-wireframe" class="btn btn-secondary" title="Toggle Wireframe Mode">
+                        <i class="fa-solid fa-cube"></i> Wireframe
+                    </button>
+                </div>
+
+                <div class="toolbar-divider"></div>
+
+                <div class="toolbar-group">
+                    <label for="color-mode-select" class="toolbar-label">Coloring:</label>
+                    <select id="color-mode-select" class="select-control">
+                        <option value="type">By Component Type</option>
+                        <option value="bore">By Nominal Bore</option>
+                        <option value="spec">By Piping Spec</option>
+                        <option value="line">By Line Reference</option>
+                    </select>
+                </div>
+
+                <div class="toolbar-divider"></div>
+
+                <div class="toolbar-group">
+                    <button id="btn-export-bom" class="btn btn-success" title="Export Bill of Materials to CSV">
+                        <i class="fa-solid fa-file-csv"></i> Export BOM
+                    </button>
+                </div>
+            </div>
         </header>
-        
-        <div class="controls">
-            <div class="control-group">
-                <label for="speed">Speed:</label>
-                <input type="range" id="speed" min="0.1" max="10" step="0.1" value="1">
-                <span id="speed-value">1x</span>
+
+        <!-- Main Content Area -->
+        <main class="main-layout">
+            <!-- Left Sidebar: Header Info & Tree Navigation -->
+            <aside class="sidebar left-sidebar" id="left-sidebar">
+                <div class="sidebar-tabs">
+                    <button class="tab-btn active" data-tab="header-panel">
+                        <i class="fa-solid fa-circle-info"></i> Pipeline Info
+                    </button>
+                    <button class="tab-btn" data-tab="tree-panel">
+                        <i class="fa-solid fa-list-tree"></i> Components
+                    </button>
+                </div>
+
+                <div class="sidebar-content">
+                    <!-- Tab 1: Header / Pipeline Attributes -->
+                    <div class="tab-pane active" id="header-panel">
+                        <div class="panel-section">
+                            <h3><i class="fa-solid fa-file-lines"></i> Header Attributes</h3>
+                            <div id="header-attributes" class="kv-container">
+                                <p class="empty-msg">No PCF file loaded</p>
+                            </div>
+                        </div>
+
+                        <div class="panel-section">
+                            <h3><i class="fa-solid fa-chart-pie"></i> Pipeline Metrics</h3>
+                            <div id="pipeline-metrics" class="metrics-grid">
+                                <div class="metric-card">
+                                    <span class="metric-value" id="metric-components-count">0</span>
+                                    <span class="metric-label">Components</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-value" id="metric-pipe-length">0.0m</span>
+                                    <span class="metric-label">Pipe Length</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-value" id="metric-max-bore">0"</span>
+                                    <span class="metric-label">Max Bore</span>
+                                </div>
+                                <div class="metric-card">
+                                    <span class="metric-value" id="metric-weld-count">0</span>
+                                    <span class="metric-label">Welds / Joints</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Components Tree List -->
+                    <div class="tab-pane" id="tree-panel">
+                        <div class="search-box">
+                            <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                            <input type="text" id="component-search" placeholder="Filter components...">
+                        </div>
+                        <div class="component-filter-tags" id="filter-tags">
+                            <span class="filter-tag active" data-filter="ALL">All</span>
+                            <span class="filter-tag" data-filter="PIPE">Pipe</span>
+                            <span class="filter-tag" data-filter="ELBOW">Elbow</span>
+                            <span class="filter-tag" data-filter="TEE">Tee</span>
+                            <span class="filter-tag" data-filter="VALVE">Valve</span>
+                            <span class="filter-tag" data-filter="FLANGE">Flange</span>
+                        </div>
+                        <div id="component-tree-list" class="component-tree">
+                            <p class="empty-msg">Load a PCF file to inspect items</p>
+                        </div>
+                    </div>
+                </div>
+                <button class="toggle-sidebar-btn left" id="toggle-left-sidebar" title="Collapse Panel">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+            </aside>
+
+            <!-- Center: 3D Viewport -->
+            <section class="viewport-container" id="drop-zone">
+                <div id="three-canvas-container"></div>
+
+                <!-- Dropzone overlay when dragging file -->
+                <div id="drag-overlay" class="drag-overlay">
+                    <div class="drag-message">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <h3>Drop PCF File Here</h3>
+                        <p>Supports Piping Component Files (.pcf, .txt)</p>
+                    </div>
+                </div>
+
+                <!-- Viewport Preset View Controls -->
+                <div class="view-preset-controls">
+                    <button data-view="iso" class="btn-preset active">ISO</button>
+                    <button data-view="top" class="btn-preset">TOP</button>
+                    <button data-view="front" class="btn-preset">FRONT</button>
+                    <button data-view="side" class="btn-preset">SIDE</button>
+                </div>
+
+                <!-- Hover Info Tooltip -->
+                <div id="hover-tooltip" class="hover-tooltip"></div>
+
+                <!-- Legend Panel -->
+                <div id="legend-panel" class="legend-panel">
+                    <h4>Component Types</h4>
+                    <div id="legend-items" class="legend-items"></div>
+                </div>
+            </section>
+
+            <!-- Right Sidebar: Properties & BOM -->
+            <aside class="sidebar right-sidebar" id="right-sidebar">
+                <div class="sidebar-tabs">
+                    <button class="tab-btn active" data-tab="properties-panel">
+                        <i class="fa-solid fa-circle-nodes"></i> Component Details
+                    </button>
+                    <button class="tab-btn" data-tab="bom-panel">
+                        <i class="fa-solid fa-table-list"></i> BOM Table
+                    </button>
+                </div>
+
+                <div class="sidebar-content">
+                    <!-- Tab 1: Component Properties Inspector -->
+                    <div class="tab-pane active" id="properties-panel">
+                        <div id="component-inspector">
+                            <div class="inspector-placeholder">
+                                <i class="fa-solid fa-mouse-pointer"></i>
+                                <p>Click any piping component in the 3D model or tree list to view detailed geometry and material properties.</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Bill of Materials Summary -->
+                    <div class="tab-pane" id="bom-panel">
+                        <div class="bom-container">
+                            <table class="bom-table">
+                                <thead>
+                                    <tr>
+                                        <th>Item</th>
+                                        <th>Type</th>
+                                        <th>N.B.</th>
+                                        <th>Qty / Length</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="bom-table-body">
+                                    <tr>
+                                        <td colspan="4" class="empty-msg">No data available</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <button class="toggle-sidebar-btn right" id="toggle-right-sidebar" title="Collapse Panel">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+            </aside>
+        </main>
+
+        <!-- Status Footer -->
+        <footer class="app-footer">
+            <div class="status-item" id="status-message">
+                <i class="fa-solid fa-circle-check status-ok"></i> Ready. Select or drag-and-drop a PCF file.
             </div>
-            <div class="control-group">
-                <button id="toggle-orbit">Pause Orbits</button>
+            <div class="status-metrics">
+                <span id="status-coords">X: 0.00 | Y: 0.00 | Z: 0.00</span>
+                <span id="status-bbox">Bounds: --</span>
             </div>
-            <div class="control-group">
-                <label for="show-labels">Show Labels:</label>
-                <input type="checkbox" id="show-labels" checked>
-            </div>
-            <div class="control-group">
-                <label for="show-orbits">Show Orbits:</label>
-                <input type="checkbox" id="show-orbits" checked>
-            </div>
-        </div>
-        
-        <div id="solar-system"></div>
-        
-        <div class="info-panel">
-            <h2>Planet Information</h2>
-            <div id="planet-info">
-                <p>Hover over a planet to see details</p>
-            </div>
-        </div>
+        </footer>
     </div>
-    
-    <script src="solar-system.js"></script>
+
+    <script src="pcf-parser.js"></script>
+    <script src="pcf-viewer.js"></script>
 </body>
 </html>
