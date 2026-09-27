@@ -314,19 +314,32 @@ showOrbitsCheckbox.addEventListener('change', (e) => {
 // Info panel
 const planetInfo = document.getElementById('planet-info');
 
+// Optimization: Pre-compute raycast mesh target array to avoid creating new arrays on every frame
+const raycastTargets = planetObjects
+    .map(p => p.mesh)
+    .filter(m => m && m.geometry && m.geometry.type === 'SphereGeometry');
+
+// Fast lookup map from Mesh UUID to planet object
+const meshToPlanetMap = new Map();
+planetObjects.forEach(p => {
+    meshToPlanetMap.set(p.mesh.uuid, p);
+});
+
+// Optimization: Cache current hovered planet to prevent redundant DOM updates every frame
+let currentHoveredPlanet = null;
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
     // Check for planet intersection
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    const intersects = raycaster.intersectObjects(raycastTargets);
     
     if (intersects.length > 0) {
-        const planet = planetObjects.find(p => p.mesh === intersects[0].object);
-        if (planet) {
+        const planet = meshToPlanetMap.get(intersects[0].object.uuid);
+        if (planet && planet !== currentHoveredPlanet) {
+            currentHoveredPlanet = planet;
             planetInfo.innerHTML = `
                 <p><strong>Name:</strong> ${planet.data.name}</p>
                 <p><strong>Distance from Sun:</strong> ${planet.data.distance} AU</p>
@@ -334,7 +347,8 @@ function animate() {
                 <p><strong>Description:</strong> ${planet.data.description}</p>
             `;
         }
-    } else {
+    } else if (currentHoveredPlanet !== null) {
+        currentHoveredPlanet = null;
         planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
     }
     
