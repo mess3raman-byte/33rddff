@@ -146,6 +146,7 @@ const planets = [
 
 // Create planets and their orbits
 const planetObjects = [];
+const planetMeshes = []; // Bolt Optimization: Cached array of planet meshes for raycasting
 const orbitLines = [];
 const planetLabels = [];
 
@@ -204,6 +205,7 @@ planets.forEach((planet, index) => {
     
     const planetMesh = new THREE.Mesh(geometry, material);
     planetGroup.add(planetMesh);
+    planetMeshes.push(planetMesh);
     
     // Add rings to Saturn
     if (planet.ring) {
@@ -229,13 +231,15 @@ planets.forEach((planet, index) => {
     }
     
     scene.add(planetGroup);
-    planetObjects.push({
+    const planetObj = {
         group: planetGroup,
         mesh: planetMesh,
         data: planet,
         angle: Math.random() * Math.PI * 2,
         rotationAngle: 0
-    });
+    };
+    planetMesh.userData.planetObj = planetObj; // Bolt Optimization: Attach reference for O(1) lookup on intersection
+    planetObjects.push(planetObj);
     
     // Add label
     const labelCanvas = document.createElement('canvas');
@@ -320,12 +324,12 @@ function animate() {
     
     // Check for planet intersection
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    // Bolt Optimization: Use pre-cached planetMeshes array to avoid array allocation, map, and filter overhead every frame (60 FPS)
+    const intersects = raycaster.intersectObjects(planetMeshes);
     
     if (intersects.length > 0) {
-        const planet = planetObjects.find(p => p.mesh === intersects[0].object);
+        // Bolt Optimization: O(1) planet object lookup via userData
+        const planet = intersects[0].object.userData.planetObj;
         if (planet) {
             planetInfo.innerHTML = `
                 <p><strong>Name:</strong> ${planet.data.name}</p>
