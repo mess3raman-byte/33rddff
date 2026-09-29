@@ -314,19 +314,24 @@ showOrbitsCheckbox.addEventListener('change', (e) => {
 // Info panel
 const planetInfo = document.getElementById('planet-info');
 
+// Performance Optimization: Pre-allocate array of sphere meshes to eliminate per-frame map()/filter() array allocations at 60 FPS
+const sphereMeshes = planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry');
+
+// Performance Optimization: Cache active hovered planet state to avoid unnecessary DOM innerHTML updates and layout reflows on every tick
+let currentHoveredPlanet = null;
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
-    // Check for planet intersection
+    // Check for planet intersection using pre-cached array
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    const intersects = raycaster.intersectObjects(sphereMeshes);
     
     if (intersects.length > 0) {
         const planet = planetObjects.find(p => p.mesh === intersects[0].object);
-        if (planet) {
+        if (planet && planet !== currentHoveredPlanet) {
+            currentHoveredPlanet = planet;
             planetInfo.innerHTML = `
                 <p><strong>Name:</strong> ${planet.data.name}</p>
                 <p><strong>Distance from Sun:</strong> ${planet.data.distance} AU</p>
@@ -334,7 +339,8 @@ function animate() {
                 <p><strong>Description:</strong> ${planet.data.description}</p>
             `;
         }
-    } else {
+    } else if (currentHoveredPlanet !== null) {
+        currentHoveredPlanet = null;
         planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
     }
     
