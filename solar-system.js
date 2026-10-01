@@ -314,28 +314,34 @@ showOrbitsCheckbox.addEventListener('change', (e) => {
 // Info panel
 const planetInfo = document.getElementById('planet-info');
 
+// Cache interactive meshes array and map for O(1) lookup during raycasting to avoid per-frame allocations
+const interactiveMeshes = planetObjects.map(p => p.mesh);
+const meshToPlanetMap = new Map(planetObjects.map(p => [p.mesh, p]));
+let currentHoveredPlanet = null;
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
-    // Check for planet intersection
+    // Check for planet intersection using cached mesh list
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    const intersects = raycaster.intersectObjects(interactiveMeshes);
+
+    const newHoveredPlanet = intersects.length > 0 ? (meshToPlanetMap.get(intersects[0].object) || null) : null;
     
-    if (intersects.length > 0) {
-        const planet = planetObjects.find(p => p.mesh === intersects[0].object);
-        if (planet) {
+    // Only update DOM when the hovered planet changes to avoid DOM thrashing (layout/paint) at 60 FPS
+    if (newHoveredPlanet !== currentHoveredPlanet) {
+        currentHoveredPlanet = newHoveredPlanet;
+        if (currentHoveredPlanet) {
             planetInfo.innerHTML = `
-                <p><strong>Name:</strong> ${planet.data.name}</p>
-                <p><strong>Distance from Sun:</strong> ${planet.data.distance} AU</p>
-                <p><strong>Radius:</strong> ${planet.data.radius} (scaled)</p>
-                <p><strong>Description:</strong> ${planet.data.description}</p>
+                <p><strong>Name:</strong> ${currentHoveredPlanet.data.name}</p>
+                <p><strong>Distance from Sun:</strong> ${currentHoveredPlanet.data.distance} AU</p>
+                <p><strong>Radius:</strong> ${currentHoveredPlanet.data.radius} (scaled)</p>
+                <p><strong>Description:</strong> ${currentHoveredPlanet.data.description}</p>
             `;
+        } else {
+            planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
         }
-    } else {
-        planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
     }
     
     // Rotate planets
