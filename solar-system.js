@@ -148,6 +148,7 @@ const planets = [
 const planetObjects = [];
 const orbitLines = [];
 const planetLabels = [];
+const planetMeshes = []; // Cached array for raycasting to avoid per-frame allocations
 
 planets.forEach((planet, index) => {
     // Create orbit path (elliptical)
@@ -204,6 +205,7 @@ planets.forEach((planet, index) => {
     
     const planetMesh = new THREE.Mesh(geometry, material);
     planetGroup.add(planetMesh);
+    planetMeshes.push(planetMesh);
     
     // Add rings to Saturn
     if (planet.ring) {
@@ -313,20 +315,21 @@ showOrbitsCheckbox.addEventListener('change', (e) => {
 
 // Info panel
 const planetInfo = document.getElementById('planet-info');
+let currentHoveredPlanet = null; // Cache hovered planet state to prevent DOM thrashing
 
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
-    // Check for planet intersection
+    // Check for planet intersection using cached planetMeshes array (avoids array allocation per frame)
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    const intersects = raycaster.intersectObjects(planetMeshes);
     
     if (intersects.length > 0) {
         const planet = planetObjects.find(p => p.mesh === intersects[0].object);
-        if (planet) {
+        if (planet && planet !== currentHoveredPlanet) {
+            currentHoveredPlanet = planet;
+            // Only update DOM innerHTML when hovered planet changes
             planetInfo.innerHTML = `
                 <p><strong>Name:</strong> ${planet.data.name}</p>
                 <p><strong>Distance from Sun:</strong> ${planet.data.distance} AU</p>
@@ -334,7 +337,8 @@ function animate() {
                 <p><strong>Description:</strong> ${planet.data.description}</p>
             `;
         }
-    } else {
+    } else if (currentHoveredPlanet !== null) {
+        currentHoveredPlanet = null;
         planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
     }
     
