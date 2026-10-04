@@ -262,6 +262,49 @@ planets.forEach((planet, index) => {
     });
 });
 
+// Add atmosphere to planets
+planetObjects.forEach((planetObj) => {
+    if (planetObj.data.name === 'Earth' || planetObj.data.name === 'Jupiter' || planetObj.data.name === 'Saturn') {
+        const atmosphereGeometry = new THREE.SphereGeometry(
+            planetObj.data.radius * 1.05,
+            32,
+            32
+        );
+        const atmosphereMaterial = new THREE.MeshBasicMaterial({
+            color: 0x3399ff,
+            transparent: true,
+            opacity: 0.2,
+            side: THREE.BackSide
+        });
+        const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+        planetObj.group.add(atmosphere);
+    }
+});
+
+// Add moon to Earth
+let moonMesh = null;
+let moonAngle = 0;
+const earthObj = planetObjects.find(p => p.data.name === 'Earth');
+if (earthObj) {
+    const moonGeometry = new THREE.SphereGeometry(3, 16, 16);
+    const moonMaterial = new THREE.MeshPhongMaterial({
+        color: 0xcccccc,
+        shininess: 10
+    });
+    moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+    moonMesh.position.x = 25;
+    earthObj.group.add(moonMesh);
+}
+
+// Optimization: Pre-cache target meshes for raycasting to avoid map/filter on every frame
+const planetMeshes = planetObjects.map(p => p.mesh).filter(m => m && m.geometry && m.geometry.type === 'SphereGeometry');
+
+// Optimization: Pre-build Map for O(1) mesh -> planet object lookup
+const meshToPlanetMap = new Map();
+planetObjects.forEach(p => {
+    meshToPlanetMap.set(p.mesh, p);
+});
+
 // Raycaster for mouse interaction
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
@@ -279,6 +322,7 @@ let animationSpeed = 1;
 let isPaused = false;
 let showLabels = true;
 let showOrbits = true;
+let currentHoveredPlanet = null; // Track hovered planet to avoid unnecessary innerHTML re-renders
 
 // Update controls
 const speedSlider = document.getElementById('speed');
@@ -318,15 +362,16 @@ const planetInfo = document.getElementById('planet-info');
 function animate() {
     requestAnimationFrame(animate);
     
-    // Check for planet intersection
+    // Optimization: Use pre-cached mesh array for raycaster intersection test
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    const intersects = raycaster.intersectObjects(planetMeshes, false);
     
     if (intersects.length > 0) {
-        const planet = planetObjects.find(p => p.mesh === intersects[0].object);
-        if (planet) {
+        // Optimization: Use O(1) Map lookup instead of Array.prototype.find()
+        const planet = meshToPlanetMap.get(intersects[0].object);
+        if (planet && currentHoveredPlanet !== planet.data.name) {
+            currentHoveredPlanet = planet.data.name;
+            // Optimization: Only update DOM when the hovered target actually changes
             planetInfo.innerHTML = `
                 <p><strong>Name:</strong> ${planet.data.name}</p>
                 <p><strong>Distance from Sun:</strong> ${planet.data.distance} AU</p>
@@ -334,24 +379,34 @@ function animate() {
                 <p><strong>Description:</strong> ${planet.data.description}</p>
             `;
         }
-    } else {
+    } else if (currentHoveredPlanet !== null) {
+        currentHoveredPlanet = null;
         planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
     }
     
     // Rotate planets
     if (!isPaused) {
-        planetObjects.forEach((planetObj, index) => {
+        const stepSpeed = animationSpeed * 0.01;
+        planetObjects.forEach((planetObj) => {
             if (planetObj.data.distance > 0) {
                 // Orbit around Sun
-                planetObj.angle += planetObj.data.orbitSpeed * animationSpeed * 0.01;
+                planetObj.angle += planetObj.data.orbitSpeed * stepSpeed;
                 planetObj.group.position.x = Math.cos(planetObj.angle) * planetObj.data.distance;
                 planetObj.group.position.z = Math.sin(planetObj.angle) * planetObj.data.distance;
             }
             
             // Rotate planet on its axis
-            planetObj.rotationAngle += planetObj.data.rotationSpeed * animationSpeed * 0.01;
+            planetObj.rotationAngle += planetObj.data.rotationSpeed * stepSpeed;
             planetObj.mesh.rotation.y = planetObj.rotationAngle;
         });
+
+        // Orbit Moon around Earth
+        if (moonMesh) {
+            moonAngle += 0.05 * stepSpeed;
+            moonMesh.position.x = Math.cos(moonAngle) * 25;
+            moonMesh.position.z = Math.sin(moonAngle) * 25;
+            moonMesh.rotation.y += 0.01 * animationSpeed;
+        }
     }
     
     // Rotate Sun
@@ -375,53 +430,5 @@ window.addEventListener('resize', () => {
     renderer.setSize(newWidth, newHeight);
 });
 
-// Start animation
+// Start animation loop
 animate();
-
-// Add some atmosphere to planets
-planetObjects.forEach((planetObj) => {
-    if (planetObj.data.name === 'Earth' || planetObj.data.name === 'Jupiter' || planetObj.data.name === 'Saturn') {
-        const atmosphereGeometry = new THREE.SphereGeometry(
-            planetObj.data.radius * 1.05, 
-            32, 
-            32
-        );
-        const atmosphereMaterial = new THREE.MeshBasicMaterial({
-            color: 0x3399ff,
-            transparent: true,
-            opacity: 0.2,
-            side: THREE.BackSide
-        });
-        const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
-        planetObj.group.add(atmosphere);
-    }
-});
-
-// Add moon to Earth
-const earth = planetObjects.find(p => p.data.name === 'Earth');
-if (earth) {
-    const moonGeometry = new THREE.SphereGeometry(3, 16, 16);
-    const moonMaterial = new THREE.MeshPhongMaterial({
-        color: 0xcccccc,
-        shininess: 10
-    });
-    const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-    moon.position.x = 25;
-    earth.group.add(moon);
-    
-    // Moon orbit animation
-    let moonAngle = 0;
-    
-    // Override Earth's animate function to include moon
-    const originalAnimate = animate;
-    window.animate = function() {
-        originalAnimate();
-        
-        if (!isPaused) {
-            moonAngle += 0.05 * animationSpeed * 0.01;
-            moon.position.x = Math.cos(moonAngle) * 25;
-            moon.position.z = Math.sin(moonAngle) * 25;
-            moon.rotation.y += 0.01 * animationSpeed;
-        }
-    };
-}
