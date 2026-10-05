@@ -34,6 +34,31 @@
             </div>
         </div>
         
+        <div class="time-controls">
+            <h2>World Time Slider</h2>
+            <div class="time-slider-container">
+                <input type="range" id="time-slider" min="0" max="24" step="0.1" value="0">
+                <div class="time-displays">
+                    <div class="time-zone">
+                        <span class="zone-label">UTC</span>
+                        <span class="time-value" id="utc-time">00:00:00</span>
+                    </div>
+                    <div class="time-zone">
+                        <span class="zone-label">IST</span>
+                        <span class="time-value" id="ist-time">05:30:00</span>
+                    </div>
+                    <div class="time-zone">
+                        <span class="zone-label">Perth</span>
+                        <span class="time-value" id="perth-time">08:00:00</span>
+                    </div>
+                </div>
+            </div>
+            <div class="time-info">
+                <span id="current-date"></span>
+                <span id="slider-hours" class="slider-hours">0 hours</span>
+            </div>
+        </div>
+        
         <div id="solar-system"></div>
         
         <div class="info-panel">

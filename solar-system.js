@@ -1,5 +1,12 @@
 // Solar System Visualization using Three.js
 
+// Time Zone Offset Definitions (in hours)
+const TIMEZONE_OFFSETS = {
+    UTC: 0,
+    IST: 5.5,  // Indian Standard Time (UTC+5:30)
+    Perth: 8   // Australian Western Standard Time (UTC+8)
+};
+
 // Scene setup
 const scene = new THREE.Scene();
 const container = document.getElementById('solar-system');
@@ -425,3 +432,129 @@ if (earth) {
         }
     };
 }
+
+// Time Zone Slider Functionality
+function initTimeSlider() {
+    const timeSlider = document.getElementById('time-slider');
+    const utcTimeDisplay = document.getElementById('utc-time');
+    const istTimeDisplay = document.getElementById('ist-time');
+    const perthTimeDisplay = document.getElementById('perth-time');
+    const currentDateDisplay = document.getElementById('current-date');
+    const sliderHoursDisplay = document.getElementById('slider-hours');
+
+    // Get current date and time
+    const now = new Date();
+    const currentDate = now.toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+    });
+    
+    // Set current date
+    if (currentDateDisplay) {
+        currentDateDisplay.textContent = currentDate;
+    }
+
+    // Update time displays based on slider value
+    function updateTimeDisplays(hours) {
+        // Calculate total seconds from hours (including fractional part)
+        const totalSeconds = Math.floor(hours * 3600);
+        const displayHours = Math.floor(hours);
+        const displayMinutes = Math.floor((hours - displayHours) * 60);
+        const displaySeconds = totalSeconds % 60;
+
+        // Format time as HH:MM:SS
+        const formatTime = (h, m, s) => {
+            const formattedH = String(h).padStart(2, '0');
+            const formattedM = String(m).padStart(2, '0');
+            const formattedS = String(s).padStart(2, '0');
+            return `${formattedH}:${formattedM}:${formattedS}`;
+        };
+
+        // UTC time (base time from slider)
+        const utcH = displayHours % 24;
+        const utcM = displayMinutes;
+        const utcS = displaySeconds;
+        
+        // IST time (UTC + 5:30)
+        let istTotalHours = hours + TIMEZONE_OFFSETS.IST;
+        const istH = Math.floor(istTotalHours) % 24;
+        const istM = Math.floor((istTotalHours - Math.floor(istTotalHours)) * 60) + displayMinutes;
+        const istS = displaySeconds;
+        
+        // Adjust IST minutes if they overflow
+        let adjustedIstM = istM;
+        let adjustedIstH = istH;
+        if (istM >= 60) {
+            adjustedIstM = istM - 60;
+            adjustedIstH = (istH + 1) % 24;
+        }
+        
+        // Perth time (UTC + 8)
+        let perthTotalHours = hours + TIMEZONE_OFFSETS.Perth;
+        const perthH = Math.floor(perthTotalHours) % 24;
+        const perthM = Math.floor((perthTotalHours - Math.floor(perthTotalHours)) * 60) + displayMinutes;
+        const perthS = displaySeconds;
+        
+        // Adjust Perth minutes if they overflow
+        let adjustedPerthM = perthM;
+        let adjustedPerthH = perthH;
+        if (perthM >= 60) {
+            adjustedPerthM = perthM - 60;
+            adjustedPerthH = (perthH + 1) % 24;
+        }
+
+        // Update displays
+        if (utcTimeDisplay) {
+            utcTimeDisplay.textContent = formatTime(utcH, utcM, utcS);
+        }
+        if (istTimeDisplay) {
+            istTimeDisplay.textContent = formatTime(adjustedIstH, adjustedIstM, istS);
+        }
+        if (perthTimeDisplay) {
+            perthTimeDisplay.textContent = formatTime(adjustedPerthH, adjustedPerthM, perthS);
+        }
+        if (sliderHoursDisplay) {
+            sliderHoursDisplay.textContent = `${Math.floor(hours)} hours`;
+        }
+    }
+
+    // Initialize with current UTC hour
+    const currentUtcHour = now.getUTCHours() + (now.getUTCMinutes() / 60) + (now.getUTCSeconds() / 3600);
+    if (timeSlider) {
+        timeSlider.value = currentUtcHour;
+    }
+
+    // Set initial time displays
+    updateTimeDisplays(currentUtcHour);
+
+    // Add event listener for slider changes
+    if (timeSlider) {
+        timeSlider.addEventListener('input', (e) => {
+            const hours = parseFloat(e.target.value);
+            updateTimeDisplays(hours);
+        });
+    }
+
+    // Auto-update time every second
+    setInterval(() => {
+        const now = new Date();
+        const currentUtcHour = now.getUTCHours() + (now.getUTCMinutes() / 60) + (now.getUTCSeconds() / 3600);
+        if (timeSlider) {
+            // Only update slider if it hasn't been manually changed recently
+            // (This prevents the slider from jumping back when user is interacting with it)
+            const sliderValue = parseFloat(timeSlider.value);
+            const diff = Math.abs(currentUtcHour - sliderValue);
+            
+            // Update if difference is more than 1 hour (user likely not interacting)
+            if (diff > 1) {
+                timeSlider.value = currentUtcHour;
+                updateTimeDisplays(currentUtcHour);
+            }
+        }
+    }, 1000);
+}
+
+// Initialize time slider when DOM is ready
+document.addEventListener('DOMContentLoaded', initTimeSlider);
+
