@@ -321,19 +321,33 @@ showOrbitsCheckbox.addEventListener('change', (e) => {
 // Info panel
 const planetInfo = document.getElementById('planet-info');
 
+// Performance Optimization: Pre-allocate interactive mesh array and map mesh to planet object
+// to avoid creating new arrays and doing O(N) array lookups on every animation frame.
+const interactiveMeshes = [];
+const meshToPlanetMap = new Map();
+
+planetObjects.forEach(planetObj => {
+    if (planetObj.mesh && planetObj.mesh.geometry && planetObj.mesh.geometry.type === 'SphereGeometry') {
+        interactiveMeshes.push(planetObj.mesh);
+        meshToPlanetMap.set(planetObj.mesh, planetObj);
+    }
+});
+
+// Track currently hovered planet to prevent redundant DOM updates on every frame (60 FPS)
+let currentHoveredPlanet = null;
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
-    // Check for planet intersection
+    // Check for planet intersection using cached interactive meshes
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    const intersects = raycaster.intersectObjects(interactiveMeshes);
     
     if (intersects.length > 0) {
-        const planet = planetObjects.find(p => p.mesh === intersects[0].object);
-        if (planet) {
+        const planet = meshToPlanetMap.get(intersects[0].object);
+        if (planet && planet !== currentHoveredPlanet) {
+            currentHoveredPlanet = planet;
             planetInfo.innerHTML = `
                 <p><strong>Name:</strong> ${planet.data.name}</p>
                 <p><strong>Distance from Sun:</strong> ${planet.data.distance} AU</p>
@@ -341,7 +355,8 @@ function animate() {
                 <p><strong>Description:</strong> ${planet.data.description}</p>
             `;
         }
-    } else {
+    } else if (currentHoveredPlanet !== null) {
+        currentHoveredPlanet = null;
         planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
     }
     
