@@ -321,28 +321,39 @@ showOrbitsCheckbox.addEventListener('change', (e) => {
 // Info panel
 const planetInfo = document.getElementById('planet-info');
 
+// Pre-allocate array and Map for raycasting optimizations (avoids array allocations and O(N) array searches every frame)
+const raycastableMeshes = planetObjects
+    .map(p => p.mesh)
+    .filter(m => m.geometry && m.geometry.type === 'SphereGeometry');
+const meshToPlanetMap = new Map(planetObjects.map(p => [p.mesh, p]));
+let currentHoveredPlanet = null;
+
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
     
-    // Check for planet intersection
+    // Check for planet intersection using cached mesh list
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    const intersects = raycaster.intersectObjects(raycastableMeshes);
     
+    let newlyHoveredPlanet = null;
     if (intersects.length > 0) {
-        const planet = planetObjects.find(p => p.mesh === intersects[0].object);
-        if (planet) {
+        newlyHoveredPlanet = meshToPlanetMap.get(intersects[0].object) || null;
+    }
+
+    // Only update DOM if hovered planet state changes to prevent expensive layout trashing on every frame
+    if (newlyHoveredPlanet !== currentHoveredPlanet) {
+        currentHoveredPlanet = newlyHoveredPlanet;
+        if (currentHoveredPlanet) {
             planetInfo.innerHTML = `
-                <p><strong>Name:</strong> ${planet.data.name}</p>
-                <p><strong>Distance from Sun:</strong> ${planet.data.distance} AU</p>
-                <p><strong>Radius:</strong> ${planet.data.radius} (scaled)</p>
-                <p><strong>Description:</strong> ${planet.data.description}</p>
+                <p><strong>Name:</strong> ${currentHoveredPlanet.data.name}</p>
+                <p><strong>Distance from Sun:</strong> ${currentHoveredPlanet.data.distance} AU</p>
+                <p><strong>Radius:</strong> ${currentHoveredPlanet.data.radius} (scaled)</p>
+                <p><strong>Description:</strong> ${currentHoveredPlanet.data.description}</p>
             `;
+        } else {
+            planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
         }
-    } else {
-        planetInfo.innerHTML = '<p>Hover over a planet to see details</p>';
     }
     
     // Rotate planets
