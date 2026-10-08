@@ -236,13 +236,16 @@ planets.forEach((planet, index) => {
     }
     
     scene.add(planetGroup);
-    planetObjects.push({
+    const planetObj = {
         group: planetGroup,
         mesh: planetMesh,
         data: planet,
         angle: Math.random() * Math.PI * 2,
         rotationAngle: 0
-    });
+    };
+    // Attach reference to planetObj on mesh for O(1) lookup during raycasting
+    planetMesh.userData.planetObj = planetObj;
+    planetObjects.push(planetObj);
     
     // Add label
     const labelCanvas = document.createElement('canvas');
@@ -268,6 +271,9 @@ planets.forEach((planet, index) => {
         visible: true
     });
 });
+
+// Pre-cache array of planet sphere meshes to avoid allocations (.map/.filter) on every frame in animate()
+const planetMeshes = planetObjects.map(p => p.mesh);
 
 // Raycaster for mouse interaction
 const raycaster = new THREE.Raycaster();
@@ -325,14 +331,14 @@ const planetInfo = document.getElementById('planet-info');
 function animate() {
     requestAnimationFrame(animate);
     
-    // Check for planet intersection
+    // Performance optimization: Raycast against pre-cached planetMeshes array
+    // to eliminate 120 temporary array allocations per second at 60 FPS.
     raycaster.setFromCamera(mouse, camera);
-    const intersects = raycaster.intersectObjects(
-        planetObjects.map(p => p.mesh).filter(m => m.geometry.type === 'SphereGeometry')
-    );
+    const intersects = raycaster.intersectObjects(planetMeshes);
     
     if (intersects.length > 0) {
-        const planet = planetObjects.find(p => p.mesh === intersects[0].object);
+        // O(1) direct lookup via userData reference instead of O(N) array search
+        const planet = intersects[0].object.userData.planetObj;
         if (planet) {
             planetInfo.innerHTML = `
                 <p><strong>Name:</strong> ${planet.data.name}</p>
